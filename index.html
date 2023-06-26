@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Sala de chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/notiflix/dist/notiflix-aio-3.2.6.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/notiflix/dist/notiflix-3.2.6.min.css" rel="stylesheet">
+    <style>
+        * {
+            font-family: Arial, Helvetica, sans-serif;
+            box-sizing: border-box;
+        }
+
+        #chat-area {
+            position: absolute;
+            margin: auto;
+            padding: 0.25rem;
+            inset: 4.5rem 1rem 3.5rem 1rem;
+            overflow-x: hidden;
+            overflow-y: scroll;
+            vertical-align: bottom;
+            display: table-cell;
+        }
+
+        .server-message {
+            float: left;
+            padding-block: 0.25rem;
+            width: 100%;
+        }
+
+        .bubble {
+            float: left;
+            border: 1px solid gray;
+            background: rgb(218, 218, 218);
+            background: linear-gradient(0deg, rgba(218, 218, 218, 1) 0%, rgba(235, 235, 235, 1) 100%);
+            box-shadow: 1px 1px 6px rgba(0, 0, 0, 0.2);
+            border-radius: 0.25rem;
+            padding: 0.5rem;
+            margin: 0.25rem 0.5rem;
+            overflow: hidden;
+            overflow-wrap: break-word;
+            width: 60%
+        }
+
+        .my-own {
+            float: right;
+            background: rgb(132, 221, 242);
+            background: linear-gradient(0deg, rgba(132, 221, 242, 1) 0%, rgba(213, 249, 255, 1) 100%);
+        }
+
+        #message-input {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            left: 1rem;
+            resize: none;
+            border: 1px solid #bbb;
+            box-shadow: 0 0 6px rgb(0, 0, 0, 0.25);
+            z-index: 1;
+            padding: 0.5rem;
+        }
+
+        #title {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 208, 255, 0.75);
+            backdrop-filter: blur(15px);
+            box-shadow: 0px 2px 20px 4px rgba(0, 0, 0, 0.5);
+            color: #fff;
+            padding-inline: 1rem;
+            z-index: 1;
+        }
+
+        .bubble small {
+            width: 100%;
+            display: block;
+            opacity: 0.75;
+            font-size: x-small;
+            font-weight: bold;
+            padding-block: 0.25rem;
+            user-select: none;
+        }
+
+        #title h1 {
+            font-size: 1.5rem;
+            user-select: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="title">
+        <h1>Sala de chat</h1>
+    </div>
+    <div id="chat-area"></div>
+    <input id="message-input" name="message-input" rows="1"></input>
+    <script defer type="text/javascript">
+        const reconnectInterval = 100
+        let socket = null
+        let id = null
+        let username = null
+
+        function connectSocket() {
+            id = null
+            socket = new WebSocket("ws://localhost:8765")
+
+            socket.addEventListener("open", (event) => {
+                while (username === null || !username.trim()) {
+                    username = prompt("¿Cuál es su nombre?", "")
+                }
+                socket.send(JSON.stringify({ username }))
+            })
+
+            socket.addEventListener("message", (event) => {
+                const chatArea = document.getElementById('chat-area')
+                const data = JSON.parse(event.data)
+                const datetime = new Date(data.timestamp)
+
+                console.log("Message from server ", event.data)
+                console.log(data)
+
+                // actualizar nombre de usuario al validado por el servidor
+                username = data.username
+
+                if (data && data.id && data.server && data.username) {
+                    const serverMessage = document.createElement("div")
+                    serverMessage.classList.add("server-message")
+
+                    switch (data.server) {
+                        case "connected": {
+                            serverMessage.innerHTML = `😀 Se unió <strong>${data.username}</strong> a la sala de chat`
+                            break
+                        }
+                        case "disconnected": {
+                            serverMessage.innerHTML = `😞 <strong>${data.username}</strong> abandonó la sala de chat`
+                            break
+                        }
+                    }
+
+                    if (serverMessage.innerHTML) { chatArea.appendChild(serverMessage) }
+                }
+
+                if (data && data.id && data.username && data.timestamp &&
+                    data.message && data.message.trim()) {
+                    const bubble = document.createElement("div")
+                    const header = document.createElement("small")
+                    const content = document.createElement("span")
+                    const footer = document.createElement("small")
+
+                    header.innerHTML = `${data.username.trim()}:`
+                    content.innerHTML = data.message.trim()
+
+                    footer.innerHTML = `Envíado ${datetime.toLocaleTimeString('es-MX')}`
+                    footer.style = "text-align: right;"
+
+                    bubble.appendChild(header)
+                    bubble.appendChild(content)
+                    bubble.appendChild(footer)
+
+                    bubble.classList.add("bubble")
+
+                    if (data.id === id) {
+                        bubble.classList.add("my-own")
+                    }
+
+                    chatArea.appendChild(bubble)
+                } else if (data?.id && !id) {
+                    id = data.id
+                }
+
+                chatArea.scrollTo(0, chatArea.scrollHeight)
+            })
+
+            socket.addEventListener("close", (event) => {
+                console.log("Close event:", event)
+                setTimeout(connectSocket, reconnectInterval)
+            })
+
+            socket.addEventListener("error", (event) => {
+                console.log("Error event", event)
+            })
+
+            return socket
+        }
+
+        function escapeHtml(unsafe) {
+            return (unsafe ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        document.getElementById("message-input").addEventListener("keydown", (event) => {
+            if (socket && socket.readyState === WebSocket.OPEN && event.keyCode === 13) {
+                const source = event.srcElement
+                socket.send(JSON.stringify({ message: source.value }))
+                source.value = ""
+                return true
+            }
+        })
+
+        connectSocket()
+
+        setInterval(() => {
+            if (socket && socket.readyState == WebSocket.OPEN) {
+                Notiflix.Loading.remove()
+            } else {
+                Notiflix.Loading.circle()
+            }
+        }, reconnectInterval)
+    </script>
+</body>
+
+</html>

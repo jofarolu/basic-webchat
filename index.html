@@ -96,7 +96,7 @@
         <h1>Sala de chat</h1>
     </div>
     <div id="chat-area"></div>
-    <input id="message-input" name="message-input" rows="1"></input>
+    <input id="message-input" name="message-input" rows="1" maxlength="200"></input>
     <script defer type="text/javascript">
         const reconnectInterval = 100
         let socket = null
@@ -111,6 +111,9 @@
                 while (username === null || !username.trim()) {
                     username = prompt("¿Cuál es su nombre?", "")
                 }
+                
+                // el nombre de usuario no deberá rebasar los 60 caracteres
+                username = username.slice(0, 60)
                 socket.send(JSON.stringify({ username }))
             })
 
@@ -183,6 +186,8 @@
                 console.log("Error event", event)
             })
 
+            // seleccionar entrada de texto al iniciar la conexión
+            document.getElementById("message-input").focus()
             return socket
         }
 

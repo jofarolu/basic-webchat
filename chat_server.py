@@ -7,6 +7,7 @@ Autor: José Fausto Romero Lujambio
 import asyncio
 import json
 import logging
+import signal
 import sys
 from collections import deque
 from datetime import datetime, timezone
@@ -108,13 +109,19 @@ async def handler(socket):
 
 async def main():
     """Iniciar servidor de Web Sockets"""
-    async with ws.serve(handler, "", 8765):
+    async with ws.serve(handler, "0.0.0.0", 8080):
         await asyncio.Future()  # run forever
 
 
+def exit_app(signum, frame):
+    print("Exiting...")
+    sys.exit(-1)
+
+
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Exiting...")
-        sys.exit(-1)
+    # registrar gestor de señales
+    signal.signal(signal.SIGINT, exit_app)
+    signal.signal(signal.SIGTERM, exit_app)
+
+    # iniciar bucle principal de ejecución
+    asyncio.run(main())
